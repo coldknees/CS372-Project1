@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
 	handle = (char*) malloc(10);
 	printf("Please enter your handle (up to 10 characters)");
 	fgets(handle, 10, stdin);
+	send(sockNo, handle, strlen(handle), 0);
 
 
 	// Get the message from the user

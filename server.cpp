@@ -1,107 +1,159 @@
-/****************************************************
+/*************************************************************************************
  * Mark Rushmere
  * CS 372
  * Project 1
- * Description: This is the client prrogram that will 
- * connect to a socket that was created using server.cpp
- * It will send a request to the chat server and after establishing 
- * a connection be able to send messages of up to 500
- * characters.
-* *************************************************/
+ * Decription: This file implements the server functionality of the
+ * server/client chat system. 
+ *
+ * ***********************************************************************************/
+
 
 
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <string.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <cstring>
+#include <string>
 
+
+// Function prototypes
+int setSocket(int *porNo);
+void bindSocket();
+void listenForReq();
+int connectClient();
+void getClientHandle();
+void sendMessage();
+void receiveMessage();
+
+
+// Global variables
+struct sockaddr_in clientAddr, serverAddr;
+int portNo, clientSock, serverSock, isConnected;
+socklen_t clientLen;
+char* sendBuff;
+char* recBuff;
+char* clientHandle;
+std::string handle = "mark";
 
 
 int main(int argc, char** argv) {
 
-
-	// Declare variables
-	char* serverName;
-	struct sockaddr_in serverAddr;
-	int portNo, sockNo, connectNo, n;
-	char* sendBuff;
-	char* recBuff;
-	char* handle;
-
-
-
 	// Check if the port number was provided
-	if(argc != 3) {
-		printf("Proper usage: client [hostname] [port number]\n");
+	if(argc != 2) {
+		printf("Proper usage: server [port number]");
 		exit(1);
 	}
 	else {
-		// Assign the hostname and port number
-		serverName = argv[1];
-		portNo = atoi(argv[2]);
-	} 
-	// Create the TCP socket
-	sockNo = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-	// Check for errors
-	if(sockNo < 0) {
-		printf("Error establishing socket\n");
-		exit(1);
+		portNo = atoi(argv[1]);
 	}
 
-	// Allocate memory for the struct containing the server info
-	memset(&serverAddr, 0, sizeof(serverAddr));
-	serverAddr.sin_family = AF_INET;
+	// Set up the TCP socket
+	serverSock = setSocket(&portNo);
+
+	// Bind the socket
+	bindSocket();
 	
-	inet_aton("127.0.0.1", (struct in_addr*)&serverAddr.sin_addr.s_addr);
-	// htons(portNo) converts the port number
-	serverAddr.sin_port = htons(portNo);
-	printf("serverAddr set\n");
-	
-	// Connect to the socket
-	connectNo = connect(sockNo, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
-	printf("connection number: %d\n", connectNo);
-	if(connectNo < 0) {
-		printf("Error connecting to the server port: %d\n", portNo);
-		exit(1);
+
+	// Establish a socket that listens for incoming reqests
+	listenForReq();
+
+
+	// Accept a client request
+	isConnected = connectClient();
+
+
+	// first get the handle from the client
+	clientHandle = (char*) malloc(10);
+	if(recv(clientSock, clientHandle, 10, 0) < 0) {
+		printf("Error reading from socket");
 	}
-
-
-
-
-	/******** ADD ERROR CHECKING LATER ***********/
-	// Get the client's handle
-	handle = (char*) malloc(10);
-	printf("Please enter your handle (up to 10 characters)");
-	fgets(handle, 10, stdin);
-
-
-	// Get the message from the user
+	else {
+		printf("Now chatting with: %s", clientHandle);
+	}
+	// allocate memory to send and receive messages
 	sendBuff = (char*) malloc(512);
 	recBuff = (char*) malloc(512);
-	printf("Enter your message: \n");
 
-	fgets(sendBuff, 512, stdin);
-	// send it
-	send(sockNo, sendBuff, strlen(sendBuff), 0);
-	//memset(sendBuff, 0, 512);
-
-	// now receive
-	if(recv(sockNo, recBuff, 512, 0) < 0) {
-		printf("Error receiving");
+	if(recv(clientSock, recBuff, 512, 0) < 0) {
+		printf("Error reading from socket");
 	}
 	else {
-		printf("Received: %s\n", recBuff);
+		printf("Here is the message: %s", recBuff);
 		//memset(recBuff, 0, 512);
 	}
 
-	// Close the socket
-	close(sockNo);
+	// Send a response
+	printf("Enter your message: \n");
+	// Clear sendBuff
+	//memset(sendBuff, 0, 512);
+	fgets(sendBuff, 512, stdin);
+	if(send(clientSock, sendBuff, strlen(sendBuff), 0) < 0) {
+		printf("Error sending message\n");
+	}
 
+
+	// Close the sockets
+	close(clientSock);
+	close(serverSock);
 
 
 	return 0;
+}
+
+
+// Fucntion to set up the server TCP socket
+
+int setSocket(int *portNo) {
+	// Set up the TCP socket
+	int serverSock;
+	serverSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if(serverSock < 0) {
+		printf("Error opening socket");
+		exit(1);
+	}
+
+	// Allocate memory for the server address information
+	memset(&serverAddr, 0, sizeof(serverAddr));
+	serverAddr.sin_family = AF_INET;
+	// htonl and htons converts ints (long and short) to network byte order	
+	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serverAddr.sin_port = htons(*portNo);
+
+
+	return serverSock;
+}
+
+void bindSocket() {
+	// Bind the socket
+	if(bind(serverSock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) < 0) {
+		printf("Error binding the socket\n");
+		exit(1);
+	}
+}
+
+void listenForReq() {
+	// Establish a socket that listens for incoming reqests
+	listen(serverSock, 1);
+	printf("listening for connection on port: %d\n", portNo);
+}
+
+int connectClient() {
+	// Accept a client request
+	clientLen = sizeof(clientAddr);
+	clientSock = accept(serverSock, (struct sockaddr*) &clientAddr, &clientLen);
+	if(clientSock < 0) {
+		printf("Error on accept");
+		return 0;
+	}
+	else {
+		return 1;
+	}
+}
+
+
+void receiveMessage() {
 
 }
