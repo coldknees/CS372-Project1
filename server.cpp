@@ -20,7 +20,7 @@
 
 
 // Function prototypes
-int setSocket(int *porNo);
+int setSocket(int *portNo);
 void bindSocket();
 void listenForReq();
 int connectClient();
@@ -36,7 +36,7 @@ socklen_t clientLen;
 char* sendBuff;
 char* recBuff;
 char* clientHandle;
-std::string handle = "mark";
+char* handle;
 
 
 int main(int argc, char** argv) {
@@ -63,37 +63,17 @@ int main(int argc, char** argv) {
 
 	// Accept a client request
 	isConnected = connectClient();
+	
 
-
-	// first get the handle from the client
-	clientHandle = (char*) malloc(10);
-	if(recv(clientSock, clientHandle, 10, 0) < 0) {
-		printf("Error reading from socket");
-	}
-	else {
-		printf("Now chatting with: %s", clientHandle);
-	}
 	// allocate memory to send and receive messages
 	sendBuff = (char*) malloc(512);
 	recBuff = (char*) malloc(512);
 
-	if(recv(clientSock, recBuff, 512, 0) < 0) {
-		printf("Error reading from socket");
+	
+	while(1) {
+		receiveMessage();
+		sendMessage();
 	}
-	else {
-		printf("Here is the message: %s", recBuff);
-		//memset(recBuff, 0, 512);
-	}
-
-	// Send a response
-	printf("Enter your message: \n");
-	// Clear sendBuff
-	//memset(sendBuff, 0, 512);
-	fgets(sendBuff, 512, stdin);
-	if(send(clientSock, sendBuff, strlen(sendBuff), 0) < 0) {
-		printf("Error sending message\n");
-	}
-
 
 	// Close the sockets
 	close(clientSock);
@@ -153,7 +133,43 @@ int connectClient() {
 	}
 }
 
+void getClientHandle() {
+	// first get the handle from the client
+	clientHandle = (char*) malloc(10);
+	if(recv(clientSock, clientHandle, 10, 0) < 0) {
+		printf("Error reading from socket");
+	}
+	else {
+		printf("Now chatting with: %s\n ", clientHandle);
+		// Send the client the server's handle
+		handle = (char*) malloc(10);
+		sprintf(handle, "mark");
+		send(clientSock, handle, strlen(handle), 0);
+	}
+}
+
+void sendMessage() {
+	// Send a response
+	printf("%s> ",  handle);
+	// Clear sendBuff
+
+	fgets(sendBuff, 512, stdin);
+	if(send(clientSock, sendBuff, strlen(sendBuff), 0) < 0) {
+		printf("Error sending message\n");
+	}
+	memset(sendBuff, 0, 512);	
+}
 
 void receiveMessage() {
+	if(recv(clientSock, recBuff, 512, 0) < 0) {
+		printf("Error reading from socket");
+	}
+	else {
+		printf("%s> ", clientHandle);
+		printf("%s", recBuff);
 
+	}
+	memset(recBuff, 0, 512);
 }
+
+
